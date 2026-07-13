@@ -1,0 +1,89 @@
+@page "/"
+@rendermode InteractiveServer
+@inject Web.Services.OrdersApiClient Orders
+
+<PageTitle>Orders</PageTitle>
+
+<h1>Orders</h1>
+
+<div class="toolbar">
+    <button class="btn-primary" @onclick="LoadAsync" disabled="@_loading">
+        @(_loading ? "Loading…" : "Load Orders")
+    </button>
+    @if (_loading)
+    {
+        <span class="spinner"></span>
+    }
+    <span class="status">@_status</span>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert">@_error</div>
+}
+
+@if (_orders is { Count: > 0 })
+{
+    <table>
+        <thead>
+            <tr>
+                <th>#</th>
+                <th>Customer</th>
+                <th>Status</th>
+                <th>Items</th>
+                <th>Total</th>
+                <th>Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var o in _orders)
+            {
+                <tr>
+                    <td>@o.Id</td>
+                    <td>@o.CustomerName</td>
+                    <td><span class="badge badge-@o.Status">@o.Status</span></td>
+                    <td>@o.ItemCount</td>
+                    <td>$@o.TotalAmount.ToString("F2")</td>
+                    <td>@o.CreatedAt.ToString("yyyy-MM-dd")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+else if (_loaded)
+{
+    <p class="muted">No orders found.</p>
+}
+
+@code {
+    private IReadOnlyList<Web.Services.OrderSummary>? _orders;
+    private bool _loading;
+    private bool _loaded;
+    private string? _status;
+    private string? _error;
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error   = null;
+        _status  = "Loading orders…";
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        try
+        {
+            _orders = await Orders.GetOrdersAsync();
+            sw.Stop();
+            _loaded = true;
+            _status = $"Loaded {_orders.Count} orders in {sw.ElapsedMilliseconds} ms";
+        }
+        catch (Exception ex)
+        {
+            _error  = $"Request failed: {ex.Message}";
+            _status = null;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

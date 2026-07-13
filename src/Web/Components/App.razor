@@ -1,0 +1,45 @@
+@inject Microsoft.Extensions.Configuration.IConfiguration Config
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    <title>SentryDemo · Orders</title>
+    <link rel="stylesheet" href="app.css" />
+
+    <!--
+        Sentry Browser SDK — Tracing + Session Replay.
+        Loaded only when a real DSN is configured, so the page works
+        out-of-the-box for local development without Sentry credentials.
+    -->
+    @{
+        var dsn = Config["Sentry:Dsn"];
+        var sentryEnabled = !string.IsNullOrWhiteSpace(dsn) && !dsn!.StartsWith("YOUR_");
+    }
+    @if (sentryEnabled)
+    {
+        <script src="https://browser.sentry-cdn.com/8.55.0/bundle.tracing.replay.min.js"
+                crossorigin="anonymous"></script>
+        <script>
+            Sentry.init({
+                dsn: '@dsn',
+                integrations: [
+                    Sentry.browserTracingIntegration(),
+                    Sentry.replayIntegration({ maskAllText: false, blockAllMedia: false })
+                ],
+                tracesSampleRate: 1.0,
+                replaysSessionSampleRate: 1.0,
+                replaysOnErrorSampleRate: 1.0,
+                tracePropagationTargets: ['localhost', /^\//],
+                release: 'web@1.0.0'
+            });
+        </script>
+    }
+</head>
+<body>
+    <Routes />
+    <script src="_framework/blazor.web.js"></script>
+</body>
+</html>
