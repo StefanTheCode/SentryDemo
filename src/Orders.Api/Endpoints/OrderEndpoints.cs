@@ -25,18 +25,23 @@ public static class OrderEndpoints
 
         var result = new List<OrderSummary>(orders.Count);
 
-        //Bug we have
+        var allItems = await db.OrderItems
+            .Where(i => orders.Select(o => o.Id).Contains(i.OrderId))
+            .ToListAsync(ct);
+
+        var allProductNames = allItems.Select(i => i.ProductName).Distinct();
+        var priceList = await pricing.GetPricesBatchAsync(allProductNames, ct);
+        var priceMap = priceList.ToDictionary(p => p.ProductName, p => p.CurrentPrice, StringComparer.OrdinalIgnoreCase);
+
         foreach (var order in orders)
         {
-            var items = await db.OrderItems
-                .Where(i => i.OrderId == order.Id)
-                .ToListAsync(ct);
+            var items = allItems.Where(i => i.OrderId == order.Id).ToList();
 
             decimal total = 0;
             foreach (var item in items)
             {
-                var price = await pricing.GetPriceAsync(item.ProductName, ct);
-                total += (price?.CurrentPrice ?? 0) * item.Quantity;
+                var unitPrice = priceMap.TryGetValue(item.ProductName, out var p) ? p : 0m;
+                total += unitPrice * item.Quantity;
             }
 
             result.Add(new OrderSummary(
