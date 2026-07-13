@@ -1,22 +1,24 @@
+using OpenTelemetry.Trace;
 using Scalar.AspNetCore;
+using Sentry.OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Native Sentry tracing (no OpenTelemetry). Incoming requests continue the
-// distributed trace started upstream (Sentry propagates trace headers on the
-// caller's instrumented HttpClient).
 builder.WebHost.UseSentry(options =>
 {
     options.Dsn = builder.Configuration["Sentry:Dsn"];
     options.TracesSampleRate = 1.0;
-    options.Environment = builder.Environment.EnvironmentName;
-    options.Debug = true;
-    options.AutoRegisterTracing = true;
-    options.AutoSessionTracking = true;
-    options.CaptureBlockingCalls = true;
-    options.Experimental.EnableLogs = true;
-    options.DiagnosticLevel = SentryLevel.Debug;
+    options.UseOpenTelemetry();
 });
+
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddSentry();
+    });
 
 builder.Services.AddOpenApi();
 
@@ -76,8 +78,6 @@ prices.MapPost("/batch", async (BatchRequest request) =>
 
     return TypedResults.Ok(result);
 });
-
-app.UseSentryTracing();
 
 app.Run();
 

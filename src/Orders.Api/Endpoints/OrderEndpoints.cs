@@ -23,25 +23,21 @@ public static class OrderEndpoints
     {
         var orders = await db.Orders.ToListAsync(ct);
 
-        // Load all order items for all orders
-        var orderIds = orders.Select(o => o.Id).ToList();
-        var allItems = await db.OrderItems
-            .Where(i => orderIds.Contains(i.OrderId))
-            .ToListAsync(ct);
-
-        // Fetch all prices in a single batch request
-        var productNames = allItems.Select(i => i.ProductName).Distinct();
-        var prices = await pricing.GetPricesBatchAsync(productNames, ct);
-        var priceMap = prices.ToDictionary(p => p.ProductName, p => p.CurrentPrice, StringComparer.OrdinalIgnoreCase);
-
-        var itemsByOrder = allItems.GroupBy(i => i.OrderId).ToDictionary(g => g.Key, g => g.ToList());
-
         var result = new List<OrderSummary>(orders.Count);
+
+        //Bug we have
         foreach (var order in orders)
         {
-            var items = itemsByOrder.TryGetValue(order.Id, out var orderItems) ? orderItems : [];
-            decimal total = items.Sum(item =>
-                (priceMap.TryGetValue(item.ProductName, out var p) ? p : 0) * item.Quantity);
+            var items = await db.OrderItems
+                .Where(i => i.OrderId == order.Id)
+                .ToListAsync(ct);
+
+            decimal total = 0;
+            foreach (var item in items)
+            {
+                var price = await pricing.GetPriceAsync(item.ProductName, ct);
+                total += (price?.CurrentPrice ?? 0) * item.Quantity;
+            }
 
             result.Add(new OrderSummary(
                 order.Id, order.CustomerName, order.Status, order.CreatedAt,

@@ -1,28 +1,32 @@
 using Microsoft.EntityFrameworkCore;
+using OpenTelemetry.Trace;
 using Orders.Api.Data;
 using Orders.Api.Endpoints;
 using Orders.Api.Pricing;
 using Scalar.AspNetCore;
+using Sentry.OpenTelemetry;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Native Sentry tracing (no OpenTelemetry).
-// Sentry auto-instruments EF Core (db.query spans) and outgoing HttpClient
-// (http.client spans), which is what Sentry's N+1 performance-issue detectors
-// key on — so the N+1 shows up as an auto-detected issue with "Find Root Cause".
 builder.WebHost.UseSentry(options =>
 {
     options.Dsn = builder.Configuration["Sentry:Dsn"];
     options.TracesSampleRate = 1.0;
-    options.Environment = builder.Environment.EnvironmentName;
-    options.Debug = true;
-    options.AutoRegisterTracing = true;
-    options.AutoSessionTracking = true;
-    options.CaptureBlockingCalls = true;
-    options.SendDefaultPii = true;
-    options.DiagnosticLevel = SentryLevel.Debug;
+    options.UseOpenTelemetry();
 });
 
+builder.Services.AddOpenTelemetry()
+    .WithTracing(tracing =>
+    {
+        tracing
+            .AddAspNetCoreInstrumentation()
+            .AddHttpClientInstrumentation()
+            .AddEntityFrameworkCoreInstrumentation(o =>
+            {
+                o.SetDbStatementForText = true;
+            })
+            .AddSentry();
+    });
 
 builder.Services.AddDbContext<OrdersDbContext>(o =>
     o.UseNpgsql(builder.Configuration.GetConnectionString("Postgres")));
@@ -50,6 +54,5 @@ app.UseCors();
 app.MapOpenApi();
 app.MapScalarApiReference();
 app.MapOrderEndpoints();
-app.UseSentryTracing();
 
 app.Run();
